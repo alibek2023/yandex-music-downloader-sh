@@ -1,0 +1,204 @@
+#!/bin/bash
+
+LOOP=
+DEBUG=
+PROFILE=
+MODE=
+DATA=
+for ARG in "$@"; do
+	if [ "${ARG:0:1}" = "/" ]; then
+		ARG=${ARG,,}
+		case $ARG in
+			"/loop")
+				LOOP=--skip-existing
+				;;
+			"/once")
+				LOOP=
+				;;
+			"/debug" | "/trace")
+				DEBUG=${ARG:1}
+				;;
+			*)
+				echo "Invalid options: $ARG - ignore"
+				;;
+		esac
+	else
+		if   [ -z "$PROFILE" ]; then
+			PROFILE=$ARG
+		elif [ -z "$MODE" ]; then
+			MODE=$ARG
+		elif [ -z "$DATA" ]; then
+			DATA=$ARG
+		else
+			echo "Invalid argument: $ARG - ignore"
+		fi
+	fi
+done
+
+if [ -z "$PROFILE" ]; then
+	echo "Usage: $0 [ /loop | /once ] <profile>                - get favorites playlist"
+	echo "       $0 [ /loop | /once ] <profile> <id>           - get user playlist"
+	echo "       $0 [ /loop | /once ] <profile> <owner>/<id>   - get playlist"
+	echo "       $0 [ /loop | /once ] <profile> artist <id>    - get artist tracks"
+	echo "       $0 [ /loop | /once ] <profile> album <id>     - get album tracks"
+	echo "       $0 [ /loop | /once ] <profile> track <id>     - get track"
+	echo "       $0 [ /loop | /once ] <profile> <url>          - get url"
+	echo "       $0 [ /loop | /once ] <profile> queue          - batch from yamusic.lst"
+	echo "  /loop - continuous cycle mode"
+	echo "  /once - single run mode (default)"
+	exit
+fi
+
+if [ ! -x ./yamusic.py ]; then
+	echo "Downloader script 'yamusic.py' not found."
+	echo "Get script from https://github.com/llistochek/yandex-music-downloader"
+	exit
+fi
+
+if [ ! -f ./yamusic.ini ]; then
+	echo "Configuration 'yamusic.ini' not found."
+	exit
+fi
+
+# Used variables:
+SESSION= # Yandex session cookies
+OWNER=   # Yandex user name, default mathes with profile name
+FAV=     # favorite playlist id
+DIR=     # output directory for save tracks
+PATH=    # subdirectory path pattern for yamusic.py
+UA=      # user agent for yamusic.py
+OPTS=    # custom options for yamusic.py
+
+function config {
+	local CS=$1
+	[ -z "$CS" ] && CS=_default_
+	local CM=
+	while read -r line; do
+		if [[ "$line" =~ ^\[.+\]$ ]]; then
+			[ "$line" = "[$CS]" ] && CM=1 || CM=
+			continue
+		fi
+		[ ! $CM ] && continue
+		[ -z "$line" ] && continue
+		[ "${line:0:1}" = "#" ] && continue
+		eval $line
+	done < ./yamusic.ini
+}
+config
+config $PROFILE
+
+DST=
+if   [ "$MODE" = "queue" ]; then
+	[ -n "$LOOP" ] && LOOP=/loop
+	[ -n "$DEBUG" ] && DEBUG=/${DEBUG}
+	re="^(.+)\s*(#.*)$"
+	while read -r line; do
+		[ -z "$line" ] && continue
+		[ "${line:0:1}" = "#" ] && continue
+		if [[ $line =~ $re ]]; then
+			line=${BASH_REMATCH[1]}
+			echo ${BASH_REMATCH[2]}
+		fi
+		$0 $LOOP $DEBUG $PROFILE $line
+	done < ./yamusic.lst
+	exit
+elif [ "$MODE" = "track" ]; then
+	[ -n "$DATA" ] && DST="--track-id $DATA"
+elif [ "$MODE" = "album" ]; then
+	[ -n "$DATA" ] && DST="--album-id $DATA"
+	DIR=$DIR/album-$DATA
+elif [ "$MODE" = "artist" ]; then
+	[ -n "$DATA" ] && DST="--artist-id $DATA"
+	DIR=$DIR/artist-$DATA
+elif [[ "$MODE" =~ ^http:\/\/ ]]; then
+	DST="--url $MODE"
+elif [[ "$MODE" =~ ^https:\/\/ ]]; then
+	DST="--url $MODE"
+elif [[ "$MODE" == *\/* ]]; then
+	DST="--playlist-id $MODE"
+	DIR=$DIR/user-${MODE/\//_}
+elif [[ "$MODE" =~ ^[0-9]+$ ]]; then
+	if [ -z "$OWNER" ]; then
+		DST="--playlist-id $PROFILE/$MODE"
+	else
+		DST="--playlist-id $OWNER/$MODE"
+	fi
+	DIR=$DIR/list-$MODE
+elif [ -z "$MODE" ]; then
+	if [ -z "$OWNER" ]; then
+		DST="--playlist-id $PROFILE/$FAV"
+	else
+		DST="--playlist-id $OWNER/$FAV"
+	fi
+	DIR=$DIR/list-$FAV
+	[ -z "$FAV" ] && DST=
+fi
+
+if [ -z "$DST" ]; then
+	echo "Invalid <profile> or <mode>."
+	echo "Usage: $0 <profile> <mode> [data]"
+	exit
+fi
+
+if [ -z "$SESSION" ]; then
+	echo "Session cookies not set in configuration profile."
+	echo "Check file 'yamusic.ini'"
+	exit
+fi
+
+[ -n "$PROFILE" ] && echo "- cfg: [$PROFILE]"
+[ -n "$SESSION" ] && echo "- sid: [<masked>]"
+[ -n "$OWNER"   ] && echo "- usr: [$OWNER]"
+[ -n "$FAV"     ] && echo "- fav: [$FAV]"
+[ -n "$DIR"     ] && echo "- dir: [$DIR]"
+[ -n "$PATH"    ] && echo "- tpl: [$PATH]"
+[ -n "$UA"      ] && echo "- ua:  [$UA]"
+[ -n "$OPTS"    ] && echo "- arg: [$OPTS]"
+[ -n "$DST"     ] && echo "- dst: [$DST]"
+[ -n "$DEBUG"   ] && echo "- dbg: [${DEBUG^^}]"
+CMD="/bin/python3.9 ./yamusic.py"
+[ -n "$SESSION" ] && CMD="$CMD --session-id \"$SESSION\""
+[ -n "$DIR"     ] && CMD="$CMD --dir $DIR"
+[ -n "$PATH"    ] && CMD="$CMD --path-pattern \"$PATH\""
+[ -n "$UA"      ] && CMD="$CMD --user-agent \"$UA\""
+[ -n "$LOOP"    ] && CMD="$CMD $LOOP"
+[ -n "$OPTS"    ] && CMD="$CMD $OPTS"
+[ -n "$DEBUG"   ] && CMD="$CMD --log-level ${DEBUG^^}"
+[ -n "$DST"     ] && CMD="$CMD $DST"
+
+if [ -n "$LOOP" ]; then
+	echo "Clock: `/usr/bin/date`" > ./yamusic.log
+	echo "\$0: $0" >> ./yamusic.log
+	echo "\$*: $*" >> ./yamusic.log
+	echo "CMD: $CMD" >> ./yamusic.log
+	echo "PID: $$" >> ./yamusic.log
+	echo >> ./yamusic.log
+fi
+
+CNT=0
+while true; do
+	let CNT++
+	TS=`/usr/bin/date +"%F %T"`
+	TMP="Pass $CNT, clock $TS\n  $DST -> $DIR"
+	echo -e $TMP
+	[ -n "$LOOP" ] && echo -e $TMP >> ./yamusic.log
+	$CMD
+	RC=$?
+	[ -z "$LOOP" ] && break
+	echo "- rc=$RC" >> ./yamusic.log
+	if [ $RC -eq 0 ]; then
+		echo "Task done, attempts count: $CNT" | /usr/bin/tee -a ./yamusic.log
+		break
+	elif [ $RC -eq 1 ]; then
+		echo "- task error, rc=$RC"
+	else
+		echo "- rc=$RC"
+	fi
+	if [ -e /dev/tty ]; then
+		read -t 300 -p "Wait 5 min or any key..." -s -n 1 < /dev/tty
+	else
+		echo -n "Wait 5 min..."
+		/usr/bin/sleep 300
+	fi
+	echo | /usr/bin/tee -a ./yamusic.log
+done

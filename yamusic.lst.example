@@ -1,0 +1,26 @@
+# Список заданий для пакетного режима queue:
+# <playlist-id> - плейлист пользователя
+# <kind>/<playlist-id> - плейлист пользователя <kind>
+# artist <artist-id> - исполнитель
+# album <album-id> - альбом
+# track <track-id> - трек
+# <url> - URL
+
+# Пустые строки и строки, начинающиеся с # - игнорируются.
+# Часть строки после # - игнорируется.
+
+# Треки Twenty One Pilots
+artist 792433
+
+# Альбом Nevermind
+album 294912
+
+# Трек Seven Nation Army
+https://music.yandex.ru/album/11644078/track/6705392
+# или track 6705392
+
+# Плейлист "Мне нравится"
+3
+
+# Плейлист "Вечные хиты"
+ya.playlist/1250

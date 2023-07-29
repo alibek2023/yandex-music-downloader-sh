@@ -1,0 +1,34 @@
+# Список доступных опций:
+# SESSION - кука Session_id (--session-id)
+# OWNER   - учетная запись пользователя Яндекс
+# FAV     - идентификатор плейлиста "Мне нравится"
+# DIR     - каталог для сохранения музыки (--dir)
+# PATH    - шаблон для подкаталогов (--path-pattern)
+# UA      - строка User-Agent (--user-agent)
+# OPTS    - дополнительные параметры, передаваемые в командную строку
+
+# Имя секции соответствует профилю. Секция _default_ - значения по умолчанию.
+# Пустые строки и строки, начинающиеся с # - игнорируются.
+
+[_default_]
+OPTS="--delay 5 --hq --embed-cover"
+DIR="/MUSIC/yamusic"
+PATH="#album-artist/#album (#year)/#number - #title"
+
+[u1]
+SESSION="...session-id-1..."
+OWNER="user1"
+DIR="/MUSIC/user1"
+FAV=3
+
+[u2]
+SESSION="...session-id-2..."
+OWNER="user1"
+DIR="/MUSIC/user1"
+FAV=3
+
+[u3]
+SESSION="...session-id-3..."
+OWNER="user2"
+DIR="/MUSIC/user2"
+FAV=3
