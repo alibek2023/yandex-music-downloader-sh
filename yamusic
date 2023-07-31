@@ -5,6 +5,7 @@ DEBUG=
 PROFILE=
 MODE=
 DATA=
+GROUP=
 for ARG in "$@"; do
 	if [ "${ARG:0:1}" = "/" ]; then
 		ARG=${ARG,,}
@@ -14,6 +15,12 @@ for ARG in "$@"; do
 				;;
 			"/once")
 				LOOP=
+				;;
+			"/group")
+				GROUP=1
+				;;
+			"/nogroup")
+				GROUP=
 				;;
 			"/debug" | "/trace")
 				DEBUG=${ARG:1}
@@ -36,16 +43,21 @@ for ARG in "$@"; do
 done
 
 if [ -z "$PROFILE" ]; then
-	echo "Usage: $0 [ /loop | /once ] <profile>                - get favorites playlist"
-	echo "       $0 [ /loop | /once ] <profile> <id>           - get user playlist"
-	echo "       $0 [ /loop | /once ] <profile> <owner>/<id>   - get playlist"
-	echo "       $0 [ /loop | /once ] <profile> artist <id>    - get artist tracks"
-	echo "       $0 [ /loop | /once ] <profile> album <id>     - get album tracks"
-	echo "       $0 [ /loop | /once ] <profile> track <id>     - get track"
-	echo "       $0 [ /loop | /once ] <profile> <url>          - get url"
-	echo "       $0 [ /loop | /once ] <profile> queue          - batch from yamusic.lst"
-	echo "  /loop - continuous cycle mode"
-	echo "  /once - single run mode (default)"
+	echo "Usage: $0 [ <options> ] <profile>                - get favorites playlist"
+	echo "       $0 [ <options> ] <profile> <id>           - get user playlist"
+	echo "       $0 [ <options> ] <profile> <owner>/<id>   - get playlist"
+	echo "       $0 [ <options> ] <profile> artist <id>    - get artist tracks"
+	echo "       $0 [ <options> ] <profile> album <id>     - get album tracks"
+	echo "       $0 [ <options> ] <profile> track <id>     - get track"
+	echo "       $0 [ <options> ] <profile> <url>          - get url"
+	echo "       $0 [ <options> ] <profile> queue          - batch from yamusic.lst"
+	echo "<options>:"
+	echo "  /loop    - continuous cycle mode"
+	echo "  /once    - single run mode (default)"
+	echo "  /group   - create subdir on task"
+	echo "  /nogroup - no create subdir (default)"
+	echo "  /debug   - debug mode"
+	echo "  /trace   - trace mode"
 	exit
 fi
 
@@ -89,6 +101,7 @@ config $PROFILE
 
 DST=
 if   [ "$MODE" = "queue" ]; then
+	[ -z "$GROUP" ] && GROUP=/nogroup
 	[ -n "$LOOP" ] && LOOP=/loop
 	[ -n "$DEBUG" ] && DEBUG=/${DEBUG}
 	re="^(.+)\s*(#.*)$"
@@ -99,38 +112,38 @@ if   [ "$MODE" = "queue" ]; then
 			line=${BASH_REMATCH[1]}
 			echo ${BASH_REMATCH[2]}
 		fi
-		$0 $LOOP $DEBUG $PROFILE $line
+		$0 $GROUP $LOOP $DEBUG $PROFILE $line
 	done < ./yamusic.lst
 	exit
 elif [ "$MODE" = "track" ]; then
 	[ -n "$DATA" ] && DST="--track-id $DATA"
 elif [ "$MODE" = "album" ]; then
 	[ -n "$DATA" ] && DST="--album-id $DATA"
-	DIR=$DIR/album-$DATA
+	[ -n "$GROUP" ] && DIR=$DIR/album-$DATA
 elif [ "$MODE" = "artist" ]; then
 	[ -n "$DATA" ] && DST="--artist-id $DATA"
-	DIR=$DIR/artist-$DATA
+	[ -n "$GROUP" ] && DIR=$DIR/artist-$DATA
 elif [[ "$MODE" =~ ^http:\/\/ ]]; then
 	DST="--url $MODE"
 elif [[ "$MODE" =~ ^https:\/\/ ]]; then
 	DST="--url $MODE"
 elif [[ "$MODE" == *\/* ]]; then
 	DST="--playlist-id $MODE"
-	DIR=$DIR/user-${MODE/\//_}
+	[ -n "$GROUP" ] && DIR=$DIR/user-${MODE/\//_}
 elif [[ "$MODE" =~ ^[0-9]+$ ]]; then
 	if [ -z "$OWNER" ]; then
 		DST="--playlist-id $PROFILE/$MODE"
 	else
 		DST="--playlist-id $OWNER/$MODE"
 	fi
-	DIR=$DIR/list-$MODE
+	[ -n "$GROUP" ] && DIR=$DIR/list-$MODE
 elif [ -z "$MODE" ]; then
 	if [ -z "$OWNER" ]; then
 		DST="--playlist-id $PROFILE/$FAV"
 	else
 		DST="--playlist-id $OWNER/$FAV"
 	fi
-	DIR=$DIR/list-$FAV
+	[ -n "$GROUP" ] && DIR=$DIR/list-$FAV
 	[ -z "$FAV" ] && DST=
 fi
 
@@ -173,6 +186,8 @@ if [ -n "$LOOP" ]; then
 	echo "CMD: $CMD" >> ./yamusic.log
 	echo "PID: $$" >> ./yamusic.log
 	echo >> ./yamusic.log
+else
+	echo $CMD
 fi
 
 CNT=0
